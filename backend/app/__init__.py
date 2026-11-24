@@ -6,6 +6,7 @@ from flask_wtf.csrf import CSRFError, generate_csrf
 
 from app.config import Config
 from app.extensions import db, migrate, csrf
+from app.database import check_database_connection
 
 
 def create_app(test_config=None):
@@ -25,9 +26,7 @@ def create_app(test_config=None):
             "SECRET_KEY is not configured"
         )
 
-    if not app.config.get(
-        "SQLALCHEMY_DATABASE_URI"
-    ):
+    if not app.config.get("SQLALCHEMY_DATABASE_URI"):
         raise RuntimeError(
             "DATABASE_URL is not configured"
         )
@@ -43,16 +42,20 @@ def create_app(test_config=None):
     migrate.init_app(app, db)
     csrf.init_app(app)
 
+    # Health API
     @app.get("/api/health")
     def health():
+
+        connected = check_database_connection()
 
         return jsonify({
             "project": app.config["APP_NAME"],
             "version": app.config["APP_VERSION"],
-            "status": "running",
-            "database": "not_verified"
-        }), 200
+            "status": "running" if connected else "degraded",
+            "database": "connected" if connected else "disconnected"
+        }), 200 if connected else 503
 
+    # CSRF token API
     @app.get("/api/auth/csrf")
     def csrf_token():
 
@@ -60,27 +63,21 @@ def create_app(test_config=None):
             "csrf_token": generate_csrf()
         }), 200
 
+    # Security headers
     @app.after_request
     def security_headers(response):
 
-        response.headers[
-            "X-Content-Type-Options"
-        ] = "nosniff"
+        response.headers["X-Content-Type-Options"] = "nosniff"
 
-        response.headers[
-            "X-Frame-Options"
-        ] = "DENY"
+        response.headers["X-Frame-Options"] = "DENY"
 
-        response.headers[
-            "Referrer-Policy"
-        ] = "no-referrer"
+        response.headers["Referrer-Policy"] = "no-referrer"
 
-        response.headers[
-            "Cache-Control"
-        ] = "no-store"
+        response.headers["Cache-Control"] = "no-store"
 
         return response
 
+    # Error handlers
     @app.errorhandler(CSRFError)
     def handle_csrf_error(error):
 
