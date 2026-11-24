@@ -7,6 +7,7 @@ from flask_wtf.csrf import CSRFError, generate_csrf
 from app.config import Config
 from app.extensions import db, migrate, csrf
 from app.database import check_database_connection
+import app.models
 
 
 def create_app(test_config=None):
